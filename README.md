@@ -43,6 +43,16 @@
 
 ---
 
+> [!IMPORTANT]
+> **This is a fork** — [kaioposnky/opencode](https://github.com/kaioposnky/opencode), tracking upstream [anomalyco/opencode](https://github.com/anomalyco/opencode) with one fix on top ([`fix(llm): recover provider-truncated tool-call names`](https://github.com/kaioposnky/opencode/commit/650d20ac4b2bf932f78be4a86786daded316aa1f)).
+>
+> Some providers (notably **Verboo** models) drop the last character of tool-call names (`read` → `rea`), which breaks every harness that consumes them. The provider only fixed its own CLI, so this fork ports the recovery into opencode: truncated tool calls are resolved against the advertised tool set at dispatch, in the AI-SDK repair hook, and on stream ingest — instead of failing with "unknown tool".
+>
+> **Este é um fork** que acompanha o upstream com uma correção extra: provedores que derrubam o último caractere do nome da ferramenta (ex.: modelos Verboo) faziam toda chamada falhar com "unknown tool". Aqui o nome truncado é recuperado e a ferramenta correta executa.
+>
+> - **Updates**: a daily workflow rebases this fork onto upstream and ships fork releases with `SHA256SUMS.txt`; the built-in updater reads **this fork's releases**, never upstream. / Um workflow diário sincroniza com o upstream e publica releases verificadas; o atualizador interno aponta para este fork.
+> - **Install / Instalação**: `curl -fsSL https://raw.githubusercontent.com/kaioposnky/opencode/truncated-tool-names/install.sh | bash` (bilingual EN/PT-BR installer; Windows: `install.ps1`)
+
 ### Installation
 
 ```bash
