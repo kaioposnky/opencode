@@ -55,6 +55,19 @@
 
 ### Installation
 
+> [!IMPORTANT]
+> **Fork install** — verified binaries from this fork's releases (bilingual EN/PT-BR
+> installer; hash-checked, replaces existing installs so the fork answers to `opencode`):
+>
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/kaioposnky/opencode/truncated-tool-names/install.sh | bash   # macOS · Linux
+> irm https://raw.githubusercontent.com/kaioposnky/opencode/truncated-tool-names/install.ps1 | iex         # Windows
+> ```
+>
+> In-app updates resolve against this fork's releases only. The package-manager
+> channels below install **upstream builds without the tool-name truncation fix**
+> and their updaters point back at upstream.
+
 ```bash
 # YOLO
 curl -fsSL https://opencode.ai/install | bash
