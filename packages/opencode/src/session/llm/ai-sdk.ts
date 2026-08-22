@@ -1,4 +1,4 @@
-import { FinishReason, LLMEvent, ProviderMetadata, ToolResultValue } from "@opencode-ai/llm"
+import { FinishReason, LLMEvent, ProviderMetadata, ToolResultValue, canonicalizeToolCallName } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import { type streamText } from "ai"
 import { errorMessage } from "@/util/error"
@@ -15,6 +15,9 @@ export function adapterState() {
     currentTextID: undefined as string | undefined,
     currentReasoningID: undefined as string | undefined,
     toolNames: {} as Record<string, string>,
+    // Tool names advertised on the request; used to recover provider-truncated
+    // tool-call names before they reach the session transcript.
+    advertisedToolNames: [] as string[],
     copilotTotalNanoAiu: undefined as number | undefined,
   }
 }
@@ -192,11 +195,12 @@ export function toLLMEvents(
 
     case "tool-input-start":
       return Effect.sync(() => {
-        state.toolNames[event.id] = event.toolName
+        const name = canonicalizeToolCallName(state.advertisedToolNames, event.toolName)
+        state.toolNames[event.id] = name
         return [
           LLMEvent.toolInputStart({
             id: event.id,
-            name: event.toolName,
+            name,
             providerMetadata: providerMetadata(event.providerMetadata),
           }),
         ]
@@ -222,11 +226,12 @@ export function toLLMEvents(
 
     case "tool-call":
       return Effect.sync(() => {
-        state.toolNames[event.toolCallId] = event.toolName
+        const name = canonicalizeToolCallName(state.advertisedToolNames, event.toolName)
+        state.toolNames[event.toolCallId] = name
         return [
           LLMEvent.toolCall({
             id: event.toolCallId,
-            name: event.toolName,
+            name,
             input: event.input,
             providerExecuted: "providerExecuted" in event ? event.providerExecuted : undefined,
             providerMetadata: providerMetadata(event.providerMetadata),
