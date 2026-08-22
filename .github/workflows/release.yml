@@ -107,6 +107,7 @@ jobs:
 
       - name: Create or update release
         if: steps.gate.outputs.skip == 'false'
+        working-directory: packages/opencode
         run: |
           set -euo pipefail
           sha="$(git rev-parse HEAD)"
