@@ -93,7 +93,8 @@ jobs:
             target="${spec%%:*}"
             ext="${spec##*:}"
             bin="dist/opencode-$target/bin"
-            test -f "$bin/opencode" || { echo "::error::Missing binary for opencode-$target"; exit 1; }
+            # Bun's windows compile emits opencode.exe.
+            test -f "$bin/opencode" || [ -f "$bin/opencode.exe" ] || { echo "::error::Missing binary for opencode-$target"; exit 1; }
             if [ "$ext" = "tar.gz" ]; then
               tar -czf "release-assets/opencode-$target.tar.gz" -C "$bin" .
             else
