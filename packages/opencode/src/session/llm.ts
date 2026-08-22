@@ -8,6 +8,7 @@ import { Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
 import type { LLMEvent } from "@opencode-ai/llm"
+import { canonicalizeToolCallName } from "@opencode-ai/llm"
 import { LLMClient } from "@opencode-ai/llm/route"
 import type { LLMClientService } from "@opencode-ai/llm/route"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
@@ -277,6 +278,7 @@ const live: Layer.Layer<
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
       return {
         type: "ai-sdk" as const,
+        advertisedToolNames: Object.keys(prepared.tools).filter((x) => x !== "invalid"),
         result: streamText({
           onError(error) {
             bridge.fork(
@@ -299,6 +301,18 @@ const live: Layer.Layer<
               return {
                 ...failed.toolCall,
                 toolName: lower,
+              }
+            }
+            // Some providers drop the final character of streamed tool names;
+            // recover the intended advertised tool before giving up.
+            const recovered = canonicalizeToolCallName(
+              Object.keys(prepared.tools).filter((x) => x !== "invalid"),
+              failed.toolCall.toolName,
+            )
+            if (recovered !== failed.toolCall.toolName && prepared.tools[recovered]) {
+              return {
+                ...failed.toolCall,
+                toolName: recovered,
               }
             }
             return {
@@ -370,6 +384,7 @@ const live: Layer.Layer<
             // Adapter seam: both runtimes expose the same LLMEvent stream. Native
             // already returns one; AI SDK streams are converted here.
             const state = LLMAISDK.adapterState()
+            state.advertisedToolNames = result.advertisedToolNames
             return Stream.fromAsyncIterable(result.result.fullStream, (e) =>
               e instanceof Error ? e : new Error(String(e)),
             ).pipe(
