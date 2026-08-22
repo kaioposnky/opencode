@@ -144,7 +144,14 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
 
     const upgradeCurl = Effect.fnUntraced(
       function* (target: string) {
-        const response = yield* httpOk.execute(HttpClientRequest.get("https://opencode.ai/install"))
+        // Fork redirect: the fork-hosted installer downloads the release binary
+        // for the detected platform and verifies it against SHA256SUMS.txt
+        // before replacing anything on disk.
+        const response = yield* httpOk.execute(
+          HttpClientRequest.get(
+            "https://raw.githubusercontent.com/kaioposnky/opencode/truncated-tool-names/install.sh",
+          ),
+        )
         const body = yield* response.text
         const bodyBytes = new TextEncoder().encode(body)
         const shell = yield* upgradeScriptShell()
@@ -255,7 +262,9 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
         }
 
         const response = yield* httpOk.execute(
-          HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
+          // Fork redirect: update checks resolve against the fork's releases so
+          // users of the fixed build never pull (or are nagged toward) upstream.
+          HttpClientRequest.get("https://api.github.com/repos/kaioposnky/opencode/releases/latest").pipe(
             HttpClientRequest.acceptJson,
           ),
         )

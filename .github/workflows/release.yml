@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["Sync with upstream"]
+    types: [completed]
+  schedule:
+    # Fallback shortly after the daily sync window.
+    - cron: "3 7 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rebuild and re-upload even if the release already matches this commit"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: >-
+      ${{ github.event_name != 'workflow_run' ||
+          github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      UPSTREAM_REPO: anomalyco/opencode
+      FORK_BRANCH: truncated-tool-names
+      FORK_REPO: kaioposnky/opencode
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: truncated-tool-names
+          fetch-depth: 0
+
+      - name: Resolve bun version
+        id: bunver
+        run: |
+          echo "version=$(jq -r '.packageManager | split("@")[1]' package.json)" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bunver.outputs.version }}
+
+      - name: Resolve upstream latest version
+        id: ver
+        run: |
+          tag="$(gh api "repos/$UPSTREAM_REPO/releases/latest" --jq .tag_name)"
+          if [ -z "$tag" ]; then echo "::error::Upstream has no releases"; exit 1; fi
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if release already built from this commit
+        id: gate
+        run: |
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ "${{ inputs.force }}" != "true" ] \
+            && gh release view "$VER_TAG" --repo "$FORK_REPO" --json body --jq .body 2>/dev/null \
+               | grep -q "fork-build-sha:$sha"; then
+            echo "Release $VER_TAG already built from $sha — skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          VER_TAG: ${{ steps.ver.outputs.tag }}
+
+      - name: Install dependencies
+        if: steps.gate.outputs.skip == 'false'
+        run: bun install
+
+      - name: Build all targets
+        if: steps.gate.outputs.skip == 'false'
+        working-directory: packages/opencode
+        env:
+          OPENCODE_VERSION: ${{ steps.ver.outputs.version }}
+          OPENCODE_CHANNEL: latest
+        run: bun ./script/build.ts
+
+      - name: Collect release assets
+        if: steps.gate.outputs.skip == 'false'
+        working-directory: packages/opencode
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          for spec in linux-x64:tar.gz linux-arm64:tar.gz darwin-arm64:zip darwin-x64:zip windows-x64:zip windows-arm64:zip; do
+            target="${spec%%:*}"
+            ext="${spec##*:}"
+            bin="dist/opencode-$target/bin"
+            test -f "$bin/opencode" || { echo "::error::Missing binary for opencode-$target"; exit 1; }
+            if [ "$ext" = "tar.gz" ]; then
+              tar -czf "release-assets/opencode-$target.tar.gz" -C "$bin" .
+            else
+              (cd "$bin" && zip -qr "../../release-assets/opencode-$target.zip" .)
+            fi
+          done
+          (cd release-assets && sha256sum opencode-* | sort > SHA256SUMS.txt)
+          ls -la release-assets/
+
+      - name: Create or update release
+        if: steps.gate.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          notes="Fork build of upstream v$VERSION with the provider tool-name truncation fix.
+
+          Assets are verified with SHA256SUMS.txt (\`sha256sum -c SHA256SUMS.txt\`).
+
+          <!-- fork-build-sha:$sha -->"
+          if gh release view "$TAG" --repo "$FORK_REPO" > /dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$FORK_REPO" --notes "$notes" --latest
+          else
+            gh release create "$TAG" --repo "$FORK_REPO" \
+              --target "$FORK_BRANCH" --title "opencode v$VERSION (fork)" --notes "$notes" --latest
+          fi
+          gh release upload "$TAG" release-assets/* --clobber --repo "$FORK_REPO"
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          VERSION: ${{ steps.ver.outputs.version }}
