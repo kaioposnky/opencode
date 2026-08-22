@@ -12,6 +12,7 @@ import {
   Tool as NativeTool,
   ToolFailure,
   ToolRuntime,
+  canonicalizeToolCallName,
   toDefinitions,
   type JsonSchema,
   type LLMEvent,
@@ -112,22 +113,25 @@ export function stream(input: StreamInput): StreamResult {
             }),
           )
           .pipe(
-            Stream.flatMap((event) =>
-              event.type !== "tool-call" || event.providerExecuted
-                ? Stream.make(event)
-                : Stream.make(event).pipe(
-                    Stream.concat(
-                      Stream.fromEffectDrain(
-                        ToolRuntime.dispatch(tools, event).pipe(
-                          Effect.flatMap((dispatched) => Queue.offerAll(results, dispatched.events)),
-                          Effect.catchCause((cause) => Queue.failCause(results, cause)),
-                          Effect.asVoid,
-                          FiberSet.run(settlements, { startImmediately: true }),
-                        ),
-                      ),
+            Stream.flatMap((event) => {
+              if (event.type !== "tool-call" || event.providerExecuted) return Stream.make(event)
+              // Recover provider-truncated tool names so the emitted event and
+              // its dispatched result reference the canonical advertised tool.
+              const name = canonicalizeToolCallName(Object.keys(tools), event.name)
+              const call = name === event.name ? event : { ...event, name }
+              return Stream.make(call).pipe(
+                Stream.concat(
+                  Stream.fromEffectDrain(
+                    ToolRuntime.dispatch(tools, call).pipe(
+                      Effect.flatMap((dispatched) => Queue.offerAll(results, dispatched.events)),
+                      Effect.catchCause((cause) => Queue.failCause(results, cause)),
+                      Effect.asVoid,
+                      FiberSet.run(settlements, { startImmediately: true }),
                     ),
                   ),
-            ),
+                ),
+              )
+            }),
             Stream.concat(
               Stream.fromEffectDrain(
                 FiberSet.awaitEmpty(settlements).pipe(Effect.andThen(Queue.end(results)), Effect.asVoid),
