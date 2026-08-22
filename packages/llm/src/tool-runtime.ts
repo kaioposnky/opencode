@@ -8,6 +8,7 @@ import {
   type ToolOutput as ToolOutputType,
   type ToolResultValue as ToolResultValueType,
 } from "./schema"
+import { canonicalizeToolCallName } from "./tool-name"
 import { type AnyTool, type Tools } from "./tool"
 
 export interface ToolSettlement {
@@ -21,15 +22,19 @@ export interface DispatchResult extends ToolSettlement {
 
 /** Execute one canonical tool call without owning provider IO or continuation. */
 export const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<DispatchResult> => {
-  const tool = tools[call.name]
-  if (!tool) return Effect.succeed(result(call, { type: "error", value: `Unknown tool: ${call.name}` }))
+  // Some providers drop the final character of streamed tool names; recover
+  // the intended tool so results and history reference its canonical name.
+  const name = canonicalizeToolCallName(Object.keys(tools), call.name)
+  const target = name === call.name ? call : { ...call, name }
+  const tool = tools[target.name]
+  if (!tool) return Effect.succeed(result(target, { type: "error", value: `Unknown tool: ${target.name}` }))
   if (!tool.execute)
-    return Effect.succeed(result(call, { type: "error", value: `Tool has no execute handler: ${call.name}` }))
+    return Effect.succeed(result(target, { type: "error", value: `Tool has no execute handler: ${target.name}` }))
 
-  return decodeAndExecute(tool, call).pipe(
-    Effect.map((value) => result(call, value)),
+  return decodeAndExecute(tool, target).pipe(
+    Effect.map((value) => result(target, value)),
     Effect.catchTag("LLM.ToolFailure", (failure) =>
-      Effect.succeed(result(call, { type: "error", value: failure.message }, failure.error)),
+      Effect.succeed(result(target, { type: "error", value: failure.message }, failure.error)),
     ),
   )
 }
