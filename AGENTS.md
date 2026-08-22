@@ -1,8 +1,15 @@
+## Fork operations (kaioposnky/opencode)
+
+- Default branch is `truncated-tool-names`. `.github/workflows/sync-upstream.yml` rebases it onto `upstream/dev` daily and force-pushes; a failed rebase means upstream touched our commits — resolve manually, then re-run the workflow.
+- `.github/workflows/release.yml` cross-compiles all six targets via `packages/opencode/script/build.ts` and publishes releases tagged `v<upstream-latest>` with `SHA256SUMS.txt` to this fork.
+- Update checks and the curl upgrade path resolve against `kaioposnky/opencode` (`packages/opencode/src/installation/index.ts`); the upgrade pipes root `install.sh` with `VERSION` preset. Do not repoint these at upstream.
+- Root `install.sh` / `install.ps1` are bilingual EN/PT-BR takeover installers shared by manual installs and in-app upgrades — keep both languages message-for-message in sync when editing.
+
 - To regenerate the legacy JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - After changing the public Protocol or Server `HttpApi`, run `bun run generate` from `packages/client`. Do not edit `src/generated` or `src/generated-effect` directly.
 - Keep runtime dependencies directed from Schema to Core and Protocol, then from Core and Protocol to Server. Client runtime code may depend on Schema and Protocol but never Core or Server; `sdk-next` composes Client, Core, and Server.
-- The default branch in this repo is `dev`.
-- Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
+- The default branch in this repo is `truncated-tool-names` (fork); upstream's default branch is `dev`.
+- Local `main` ref may not exist; use `truncated-tool-names`, `upstream/dev`, or `origin/dev` for diffs.
 
 ## Branch Names
 
