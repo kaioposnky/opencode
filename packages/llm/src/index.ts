@@ -12,6 +12,7 @@ export * from "./schema"
 export { Tool, ToolFailure, toDefinitions } from "./tool"
 export { ToolRuntime } from "./tool-runtime"
 export type { DispatchResult as ToolDispatchResult, ToolSettlement } from "./tool-runtime"
+export { canonicalizeToolCallName, resolveToolNameByUniquePrefix } from "./tool-name"
 export type {
   AnyExecutableTool,
   AnyTool,
