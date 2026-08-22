@@ -97,7 +97,8 @@ jobs:
             if [ "$ext" = "tar.gz" ]; then
               tar -czf "release-assets/opencode-$target.tar.gz" -C "$bin" .
             else
-              (cd "$bin" && zip -qr "../../release-assets/opencode-$target.zip" .)
+              # bin -> dist/<name> -> dist -> package root; release-assets lives at the root.
+              (cd "$bin" && zip -qr "../../../release-assets/opencode-$target.zip" .)
             fi
           done
           (cd release-assets && sha256sum opencode-* | sort > SHA256SUMS.txt)
